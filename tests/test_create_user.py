@@ -6,17 +6,19 @@ import allure
 import requests
 import pytest
 import urls
-from generators import generate_email, generate_password, generate_name
+from helpers import generate_user_data
 
 
+@allure.feature("Создание пользователя")
 class TestUserRegistration:
-    @allure.title('Создание пользователя')
-    def test_create_user_success(self, new_user_data):
+    
+    @allure.title("Успешное создание пользователя")
+    def test_create_user_success(self):
         """Создание пользователя с валидными данными"""
-        payload = new_user_data
+        payload = generate_user_data()
         
-        with allure.step('Создание пользователя'):
-            response = requests.post(urls.Endpoints.register, json=payload)  # используем register вместо REGISTER
+        with allure.step("Выполнить POST запрос для регистрации пользователя"):
+            response = requests.post(urls.Endpoints.register, json=payload)
         
         assert response.status_code == 200
         response_data = response.json()
@@ -26,46 +28,42 @@ class TestUserRegistration:
         
         # Удаляем пользователя
         token = response_data['accessToken']
-        requests.delete(
-            urls.Endpoints.user_delete,  # используем user_delete вместо USER
+        delete_response = requests.delete(
+            urls.Endpoints.user_delete,
             headers={'Authorization': f'Bearer {token}'}
         )
+        assert delete_response.status_code == 200
 
-    @allure.title('Создание уже существующего пользователя')
-    def test_create_existing_user(self):
-        """Создание пользователя с уже существующим email"""
-        user_data = {
-            'email': generate_email(),
-            'password': generate_password(),
-            'name': generate_name()
+    @allure.title("Создание пользователя с существующим email")
+    def test_create_user_with_existing_email(self, authenticated_user):
+        """Попытка создания пользователя с email, который уже используется"""
+        existing_email = authenticated_user['email']
+        payload = {
+            'email': existing_email,
+            'password': 'DifferentPassword123',
+            'name': 'Different Name'
         }
         
-        # Регистрируем первого пользователя
-        first_response = requests.post(urls.Endpoints.register, json=user_data)  # используем register
-        assert first_response.status_code == 200
-        token = first_response.json()['accessToken']
-        
-        # Пытаемся зарегистрировать с тем же email
-        response = requests.post(urls.Endpoints.register, json=user_data)  # используем register
+        with allure.step("Выполнить POST запрос для регистрации пользователя с существующим email"):
+            response = requests.post(urls.Endpoints.register, json=payload)
         
         assert response.status_code == 403
         assert response.json()['success'] is False
-        
-        # Удаляем пользователя
-        requests.delete(
-            urls.Endpoints.user_delete,  # используем user_delete
-            headers={'Authorization': f'Bearer {token}'}
-        )
 
-    @allure.title('Создание пользователя без указания одного из полей')
-    @pytest.mark.parametrize('payload', [
-        {'password': 'password123', 'name': 'Test Name'},
-        {'email': 'test@example.com', 'name': 'Test Name'},
-        {'email': 'test@example.com', 'password': 'password123'},
+    @allure.title("Создание пользователя без обязательных полей")
+    @pytest.mark.parametrize('payload, missing_field', [
+        ({'password': 'password123', 'name': 'Test Name'}, 'email'),
+        ({'email': 'test@example.com', 'name': 'Test Name'}, 'password'),
+        ({'email': 'test@example.com', 'password': 'password123'}, 'name'),
     ])
-    def test_create_user_missing_field(self, payload):
+    def test_create_user_missing_field(self, payload, missing_field):
         """Создание пользователя без обязательного поля"""
-        response = requests.post(urls.Endpoints.register, json=payload)  # используем register
+        with allure.step(f"Выполнить POST запрос без поля {missing_field}"):
+            response = requests.post(urls.Endpoints.register, json=payload)
         
-        assert response.status_code in [400, 403]
-        assert response.json()['success'] is False
+        with allure.step(f"Проверить ошибку при отсутствии поля {missing_field}"):
+            # Исправлено: однозначный ожидаемый результат - 400 Bad Request
+            assert response.status_code == 400
+        
+        with allure.step("Проверить сообщение об ошибке"):
+            assert response.json()['success'] is False

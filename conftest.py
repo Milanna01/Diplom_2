@@ -1,6 +1,6 @@
 import pytest
 import requests
-from generators import generate_email, generate_password, generate_name
+from helpers import generate_user_data
 from urls import Endpoints
 from data import TestUser
 
@@ -8,21 +8,13 @@ from data import TestUser
 @pytest.fixture()
 def new_user_data():
     """Данные нового пользователя"""
-    return {
-        'email': generate_email(),
-        'password': generate_password(),
-        'name': generate_name()
-    }
+    return generate_user_data()
 
 
 @pytest.fixture()
 def authenticated_user():
     """Авторизованный пользователь с автоматическим удалением"""
-    user_data = {
-        'email': generate_email(),
-        'password': generate_password(),
-        'name': generate_name()
-    }
+    user_data = generate_user_data()
     
     # Регистрируем пользователя
     register_response = requests.post(Endpoints.register, json=user_data)
